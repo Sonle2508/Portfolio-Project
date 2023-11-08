@@ -1,0 +1,120 @@
+
+--Inspecting Data
+
+select * from dbo.sales_data
+
+-- Checking Unique Values
+
+select distinct status from dbo.sales_data
+
+select distinct YEAR_ID from dbo.sales_data
+
+select distinct PRODUCTLINE from dbo.sales_data
+
+select distinct COUNTRY from dbo.sales_data
+
+select distinct DEALSIZE from dbo.sales_data
+
+select distinct TERRITORY from dbo.sales_data
+
+-- ANALYST
+--- Grouping sales by PRODUCTLINE
+
+select PRODUCTLINE, sum(sales) as Revenue
+from dbo.sales_data
+group by PRODUCTLINE
+order by 2 desc
+
+--- Grouping sales by YEAR
+
+select YEAR_ID, sum(sales) as Revenue
+from dbo.sales_data
+group by YEAR_ID
+order by 2 desc
+
+--- Grouping sales by DEALSIZE 
+
+select DEALSIZE, sum(sales) as Revenue
+from dbo.sales_data
+group by DEALSIZE
+order by 2 desc
+
+--- What was the best month for sales in a specific year? How much was earned that month?
+
+select MONTH_ID, sum(sales) as Revenue, count(ORDERNUMBER) as Frequency
+from dbo.sales_data
+where YEAR_ID = 2004
+group by MONTH_ID
+order by 2 desc
+
+--- November seems to be the month, what product do they sell in November ?
+
+select MONTH_ID, sum(sales) as Revenue, count(ORDERNUMBER) as Frequency
+from dbo.sales_data
+where YEAR_ID = 2004 and MONTH_ID = 11
+group by MONTH_ID, PRODUCTLINE
+order by 3 desc
+
+--- Who is our best customer
+
+with rfm_scores as (
+    select
+        customername,
+        datediff(day, max(orderdate), getdate()) as recency,
+        count(ordernumber) as frequency,
+        sum(sales) as monetary
+    from dbo.sales_data
+    group by customername
+)
+
+select
+    customername,
+    recency,
+    frequency,
+    monetary,
+    concat('R', case
+                 when recency < 30 then 5
+                 when recency < 60 then 4
+                 when recency < 90 then 3
+                 when recency < 120 then 2
+                 else 1
+             end,
+             'F', case 
+                 when frequency >= 5 then 5
+                 when frequency >= 4 then 4
+                 when frequency >= 3 then 3
+                 when frequency >= 2 then 2
+                 else 1
+             end,
+             'M', case
+                 when monetary >= 1000 then 5
+                 when monetary >= 500 then 4
+                 when monetary >= 250 then 3
+                 when monetary >= 100 then 2
+                 else 1
+             end) as rfm_score
+from rfm_scores
+order by rfm_score desc
+offset 0 rows
+fetch next 1 rows only
+
+--- What products are most often sold together?
+
+with OrderProducts as (
+    select ordernumber, productcode
+    from dbo.sales_data
+    where ordernumber in (
+        select ordernumber
+        from dbo.sales_data
+        group by ordernumber
+        having count(distinct productcode) >= 2
+    )
+)
+
+select a.productcode as product1, 
+	   b.productcode as product2, 
+	   count(*) as frequency
+from OrderProducts a
+join OrderProducts b on a.ordernumber = b.ordernumber and a.productcode < b.productcode
+group by a.productcode, b.productcode
+order by frequency desc
